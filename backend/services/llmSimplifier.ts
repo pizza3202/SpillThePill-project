@@ -1,14 +1,20 @@
 import dotenv from "dotenv";
 import path from "path";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
+
+if (!GOOGLE_AI_API_KEY) {
+  throw new Error('GOOGLE_AI_API_KEY is required in environment variables');
+}
+
+const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY);
 
 const MODEL_MAP: Record<string, string> = {
-  regular: "deepseek/deepseek-chat-v3-0324:free",
-  simplified: "deepseek/deepseek-chat-v3-0324:free"
+  regular: "gemini-1.5-flash",
+  simplified: "gemini-1.5-flash"
 };
 
 function buildPrompt(rawData: {
@@ -94,76 +100,61 @@ Please provide a comprehensive overview including:
 
 Format the response in clear sections with headings. Include specific medical terminology and detailed information.`;
     } else {
-      // Simplified model - key info for busy people
-      prompt = `You are a medical information assistant. Provide simple, easy-to-understand information about "${rawInfo.name}" medication. This is for people with limited time who need key information quickly.
+      // Simplified model - casual, everyday language style
+      prompt = `You're explaining "${rawInfo.name}" to a friend in casual, everyday language. Use simple words and natural speech patterns - like how you'd actually talk to someone, not like a textbook.
 
-Please provide simplified information including:
+IMPORTANT: You MUST follow this EXACT structure with these EXACT headings and emojis:
 
-**What is ${rawInfo.name} for?**
-- Simple explanation of what it treats
-- How it helps (in plain language)
+💊 **What it is**
+- A basic description and drug type
+- Give it a casual nickname or describe it simply
 
-**How to take it:**
-- Simple dosage instructions
-- When to take it
-- Basic tips (with food, etc.)
+🎯 **What it does**
+- Purpose and conditions it treats
+- What problems does it solve?
 
-**Important warnings:**
-- Key things to avoid
-- When to call a doctor
-- Emergency signs to watch for
+⚙️ **How it works**
+- Simple explanation of its mechanism
+- Explain the basic mechanism in everyday language
 
-**Common side effects:**
-- Most likely side effects
-- What to do if they happen
+✨ **Result**
+- What you may feel or experience
+- What changes you can expect
 
-**Quick tips:**
-- 2-3 important things to remember
-- When to seek medical help
+🧪 **Uses**
+- Common applications or medical scenarios
+- List the main uses in everyday language
 
-Use simple, everyday language. Avoid medical jargon. Focus on what patients need to know quickly. Keep it concise but helpful.`;
+🚫 **When not to take**
+- Warnings and contraindications
+- What to avoid and why
+
+😵 **Side effects**
+- What to watch out for
+- Most common side effects in plain language
+
+🧠 **Fun facts**
+- Cool tips or surprising info
+- Add something interesting or memorable
+
+CRITICAL: Use casual, conversational language throughout but ALWAYS follow this exact structure with these exact emoji headings. Do not write in paragraphs - use the bullet point format shown above.`;
     }
 
-    console.log('Making OpenRouter API call with model:', modelId);
-    console.log('API Key exists:', !!OPENROUTER_API_KEY);
-    console.log('API Key starts with:', OPENROUTER_API_KEY?.substring(0, 10) + '...');
+    console.log('Making Google Gemini API call with model:', modelId);
+    console.log('Google AI API Key exists:', !!GOOGLE_AI_API_KEY);
     
-    const response = await fetch(OPENROUTER_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://spillthepill.com',
-        'X-Title': 'SpillThePill Drug Simplifier'
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        max_tokens: 1000,
-        temperature: 0.3,
-      })
-    });
+    // Get the Gemini model
+    const geminiModel = genAI.getGenerativeModel({ model: modelId });
     
-    console.log('OpenRouter response status:', response.status);
-    console.log('OpenRouter response headers:', Object.fromEntries(response.headers.entries()));
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('OpenRouter API error response:', error);
-      console.error('OpenRouter API error status:', response.status);
-      throw new Error(`OpenRouter error: ${response.status} ${error}`);
-    }
-
-    const data = await response.json();
-    const simplified = data.choices?.[0]?.message?.content || "Unable to simplify drug information.";
+    // Generate content using Gemini
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    const simplified = response.text() || "Unable to simplify drug information.";
+    
+    console.log('Google Gemini response generated successfully');
     return { simplified };
   } catch (error: any) {
-    console.error("OpenRouter error:", error.message);
-    throw new Error(`OpenRouter error: ${error.message}`);
+    console.error("Google Gemini error:", error.message);
+    throw new Error(`Google Gemini error: ${error.message}`);
   }
 } 

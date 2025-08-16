@@ -2,10 +2,18 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import path from 'path';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import drugRoutes from "./routes/drugRoutes";
 import authRoutes from "./routes/authRoutes";
 import { simplifyMedicineInfo } from "./services/llmSimplifier";
+
 dotenv.config({ path: path.resolve(__dirname, '.env') });
+
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
+if (!GOOGLE_AI_API_KEY) {
+  throw new Error('GOOGLE_AI_API_KEY is required in environment variables');
+}
+const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY);
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -26,45 +34,18 @@ app.post("/api/chat", async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+    // Create the PillBot prompt with system instructions
+    const pillBotPrompt = `You are PillBot, a helpful medical assistant. Provide accurate, easy-to-understand information about medications, health conditions, and medical topics. Always recommend consulting healthcare providers for specific medical advice.
 
-    if (!OPENROUTER_API_KEY) {
-      throw new Error('OpenRouter API key not found');
-    }
+User question: ${message}`;
 
-    const response = await fetch(OPENROUTER_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://spillthepill.com',
-        'X-Title': 'SpillThePill ChatBot'
-      },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat-v3-0324:free',
-        messages: [
-          {
-            role: "system",
-            content: "You are PillBot, a helpful medical assistant. Provide accurate, easy-to-understand information about medications, health conditions, and medical topics. Always recommend consulting healthcare providers for specific medical advice."
-          },
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-        max_tokens: 500,
-        temperature: 0.3,
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenRouter error: ${response.status} ${error}`);
-    }
-
-    const data = await response.json();
-    const chatResponse = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process your question. Please try again.";
+    // Get the Gemini model
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    
+    // Generate response using Gemini
+    const result = await model.generateContent(pillBotPrompt);
+    const response = await result.response;
+    const chatResponse = response.text() || "I'm sorry, I couldn't process your question. Please try again.";
 
     console.log('Chat response generated:', chatResponse);
     res.json({ response: chatResponse });
