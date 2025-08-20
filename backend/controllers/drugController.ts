@@ -1,7 +1,15 @@
 import axios from "axios";
 import { Request, Response } from "express";
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { getRawDrugData } from '../services/dbApi';
 import { simplifyMedicineInfo } from "../services/llmSimplifier";
+
+// Initialize Google AI
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
+if (!GOOGLE_AI_API_KEY) {
+  throw new Error('GOOGLE_AI_API_KEY is required in environment variables');
+}
+const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY);
 
 // RxCUI function removed - no longer needed with direct drug name search
 
@@ -53,17 +61,10 @@ export const getDailyMedInfo = async (req: Request, res: Response) => {
   }
 };
 
-// Helper function to translate text using OpenRouter
+// Helper function to translate text using Google Gemini
 async function translateText(text: string, targetLang: string): Promise<string> {
   try {
-    console.log('Starting translation to:', targetLang);
-    const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
-    const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
-    
-    if (!OPENROUTER_API_KEY) {
-      console.error('OpenRouter API key not found for translation');
-      return text;
-    }
+    console.log('Starting Gemini translation to:', targetLang);
     
     // Map language codes to language names
     const languageMap: Record<string, string> = {
@@ -78,56 +79,28 @@ async function translateText(text: string, targetLang: string): Promise<string> 
     
     const languageName = languageMap[targetLang.toLowerCase()] || targetLang;
     
-    // Map language names to more specific instructions
-    let translationInstruction = `Translate the following medical information to ${languageName}. Keep the same formatting and structure:\n\n${text}`;
-    
-    // Add specific language instructions for better translation
-    if (languageName.toLowerCase() === 'french') {
-      translationInstruction = `Translate the following medical information to French (Français). Keep the same formatting and structure. Use proper French medical terminology:\n\n${text}`;
-    } else if (languageName.toLowerCase() === 'spanish') {
-      translationInstruction = `You are a medical translator. Translate this medical information to Spanish (Español). Maintain the exact same formatting and structure. Use proper Spanish medical terminology. IMPORTANT: Respond ONLY in Spanish:\n\n${text}`;
-    } else if (languageName.toLowerCase() === 'chinese') {
-      translationInstruction = `You are a medical translator. Translate this medical information to Chinese (中文). Maintain the exact same formatting and structure. Use proper Chinese medical terminology. IMPORTANT: Respond ONLY in Chinese:\n\n${text}`;
-    } else if (languageName.toLowerCase() === 'german') {
-      translationInstruction = `You are a medical translator. Translate this medical information to German (Deutsch). Maintain the exact same formatting and structure. Use proper German medical terminology. IMPORTANT: Respond ONLY in German:\n\n${text}`;
-    } else {
-      // For any other language, use a more explicit instruction
-      translationInstruction = `You are a medical translator. Translate the following medical information to ${languageName}. Maintain the exact same formatting, structure, and medical accuracy. IMPORTANT: Respond ONLY in ${languageName}:\n\n${text}`;
-    }
-    
-    const response = await fetch(OPENROUTER_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://spillthepill.com',
-        'X-Title': 'SpillThePill Translator'
-      },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat-v3-0324:free',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a professional medical translator. Always translate the user\'s request to the specified language. Never respond in English unless specifically asked.'
-          },
-          {
-            role: 'user',
-            content: translationInstruction
-          }
-        ],
-        max_tokens: 1000,
-        temperature: 0.1
-      })
-    });
+    // Create translation prompt for Gemini
+    const translationPrompt = `You are a medical translator. Translate the following medical information to ${languageName}. 
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Translation API error:', response.status, errorText);
-      throw new Error(`Translation failed: ${response.status} ${errorText}`);
-    }
+IMPORTANT INSTRUCTIONS:
+- Maintain the exact same formatting and structure (including ** for headings, - for bullet points, and ALL emojis)
+- Keep the casual, friendly tone - don't make it formal
+- Preserve ALL emojis exactly as they appear (💊, 🎯, ⚙️, ✨, 🧪, 🚫, 😵, 🧠)
+- Use simple, everyday language in ${languageName} - not formal medical terminology
+- Respond ONLY in ${languageName}, never in English
+- Keep all medical information accurate but make it sound natural and conversational
 
-    const data = await response.json();
-    const translatedText = data.choices?.[0]?.message?.content;
+Medical text to translate:
+
+${text}`;
+
+    // Get the Gemini model
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    
+    // Generate translation using Gemini
+    const result = await model.generateContent(translationPrompt);
+    const response = await result.response;
+    const translatedText = response.text();
     
     if (translatedText) {
       // Check if the translation actually changed the text
@@ -213,13 +186,13 @@ export const simplifyDrugInfoController = async (req: Request, res: Response) =>
 
     // No more error checking since getRawDrugData always returns valid data now
 
-    console.log('Raw drug data fetched successfully, calling OpenRouter...');
-    console.log('OpenRouter API Key exists:', !!process.env.OPENROUTER_API_KEY);
+    console.log('Raw drug data fetched successfully, calling Google Gemini...');
+    console.log('Google AI API Key exists:', !!GOOGLE_AI_API_KEY);
     
     try {
-      // Use the new OpenRouter service
+      // Use the new Google Gemini service
       const result = await simplifyMedicineInfo(rawInfo, 'en', model);
-      console.log('OpenRouter call successful');
+      console.log('Google Gemini call successful');
 
       let simplified = result.simplified;
       
@@ -234,26 +207,26 @@ export const simplifyDrugInfoController = async (req: Request, res: Response) =>
       }
 
       return res.json({ simplified });
-    } catch (openRouterError) {
-      console.error('OpenRouter error:', openRouterError);
+    } catch (geminiError) {
+      console.error('Google Gemini error:', geminiError);
       
       // Check for specific error types
       let errorMessage = 'LLM service temporarily unavailable';
-      if (openRouterError instanceof Error) {
-        if (openRouterError.message.includes('401')) {
-          errorMessage = 'OpenRouter API authentication failed - please check API key';
-        } else if (openRouterError.message.includes('429')) {
-          errorMessage = 'OpenRouter API rate limit reached - using fallback data. Please try again later or upgrade your OpenRouter plan.';
-        } else if (openRouterError.message.includes('500')) {
-          errorMessage = 'OpenRouter API server error - please try again later';
-        } else if (openRouterError.message.includes('Network')) {
-          errorMessage = 'Network error connecting to OpenRouter API';
+      if (geminiError instanceof Error) {
+        if (geminiError.message.includes('401') || geminiError.message.includes('403')) {
+          errorMessage = 'Google AI API authentication failed - please check API key';
+        } else if (geminiError.message.includes('429')) {
+          errorMessage = 'Google AI API rate limit reached - using fallback data. Please try again later.';
+        } else if (geminiError.message.includes('500')) {
+          errorMessage = 'Google AI API server error - please try again later';
+        } else if (geminiError.message.includes('Network')) {
+          errorMessage = 'Network error connecting to Google AI API';
         }
       }
       
       console.log(`Using fallback data due to: ${errorMessage}`);
       
-      // Return mock data if OpenRouter fails
+      // Return mock data if Google Gemini fails
       let mockSimplified = `**${rawInfo.name} - Simplified Information**
 
 **What is it?**

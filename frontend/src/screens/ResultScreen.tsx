@@ -64,8 +64,15 @@ export default function ResultScreen({ medicineName, model, language }: {
     setError('');
     try {
       // Use localhost for web, IP address for mobile
-      const baseUrl = Platform.OS === 'web' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
-      const response = await fetch(`${baseUrl}/api/drugs/simplify/${encodeURIComponent(medicineName)}?model=${model}&language=${language}`);
+      // Platform-specific API URLs
+      const getApiUrl = () => {
+        if (Platform.OS === 'android') {
+          return 'http://10.0.2.2:5050'; // Android emulator
+        }
+        return 'http://localhost:5050'; // Web & iOS simulator
+      };
+      
+      const response = await fetch(`${getApiUrl()}/api/drugs/simplify/${encodeURIComponent(medicineName)}?model=${model}&language=${language}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -118,17 +125,33 @@ export default function ResultScreen({ medicineName, model, language }: {
 
   // Save current medicine to Saved Medicines
   const saveToSavedMedicines = async (name: string) => {
-    if (saveButtonState === 'saved') return; // Prevent duplicate saves
+    console.log('Save button clicked! Medicine:', name);
+    console.log('Save button state:', saveButtonState);
+    console.log('Is authenticated:', isAuthenticated);
+    
+    if (saveButtonState === 'saved') {
+      console.log('Already saved, returning early');
+      return; // Prevent duplicate saves
+    }
     
     if (!isAuthenticated) {
-      Alert.alert(
-        'Sign In Required',
-        'Please sign in to save medicines to your account.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Sign In', onPress: () => router.push('/(tabs)/profile') }
-        ]
-      );
+      console.log('User not authenticated, showing alert');
+      if (Platform.OS === 'web') {
+        // Use browser alert for web
+        if (window.confirm('Sign In Required\n\nPlease sign in to save medicines to your account.\n\nWould you like to go to the sign in page?')) {
+          router.push('/(tabs)/profile');
+        }
+      } else {
+        // Use React Native Alert for mobile
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in to save medicines to your account.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => router.push('/(tabs)/profile') }
+          ]
+        );
+      }
       return;
     }
     

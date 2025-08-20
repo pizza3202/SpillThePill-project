@@ -140,9 +140,15 @@ export default function MobileHomeScreen() {
     setIsChatLoading(true);
 
     try {
-      // Use localhost for web, IP address for mobile
-      const baseUrl = Platform.OS === 'web' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
-      const response = await fetch(`${baseUrl}/api/chat`, {
+      // Platform-specific API URLs for PillBot chat
+      const getApiUrl = () => {
+        if (Platform.OS === 'android') {
+          return 'http://10.0.2.2:5050'; // Android emulator
+        }
+        return 'http://localhost:5050'; // Web & iOS simulator
+      };
+      
+      const response = await fetch(`${getApiUrl()}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
@@ -1346,9 +1352,15 @@ const AskPillBotModal = ({ visible, onClose }: { visible: boolean; onClose: () =
     setIsChatLoading(true);
 
     try {
-      // Use localhost for web, IP address for mobile
-      const baseUrl = Platform.OS === 'web' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
-      const response = await fetch(`${baseUrl}/api/chat`, {
+      // Platform-specific API URLs for PillBot chat
+      const getApiUrl = () => {
+        if (Platform.OS === 'android') {
+          return 'http://10.0.2.2:5050'; // Android emulator
+        }
+        return 'http://localhost:5050'; // Web & iOS simulator
+      };
+      
+      const response = await fetch(`${getApiUrl()}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),

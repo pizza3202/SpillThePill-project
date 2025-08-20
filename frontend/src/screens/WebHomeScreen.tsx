@@ -123,37 +123,19 @@ export default function WebHomeScreen() {
     setIsChatLoading(true);
     
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/chat`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_OPENROUTER_API_KEY}`,
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'SpillThePill'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'deepseek/deepseek-chat-v3-0324:free',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are PillBot, a helpful AI assistant for medication and health information. Provide accurate, helpful, and safe medical advice. Always remind users to consult healthcare professionals for specific medical concerns.'
-            },
-            ...chatHistory.map(msg => ({
-              role: msg.role,
-              content: msg.text
-            })),
-            {
-              role: 'user',
-              content: userMessage
-            }
-          ],
-          max_tokens: 500
+          message: userMessage
         })
       });
       
       if (response.ok) {
         const data = await response.json();
-        const botMessage = data.choices[0].message.content;
+        const botMessage = data.response;
         setChatHistory(prev => [...prev, { role: 'bot', text: botMessage }]);
       } else {
         setChatHistory(prev => [...prev, { role: 'bot', text: 'Sorry, I could not answer that. Please try again.' }]);
