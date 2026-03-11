@@ -13,9 +13,19 @@ if (!GOOGLE_AI_API_KEY) {
 const genAI = new GoogleGenerativeAI(GOOGLE_AI_API_KEY);
 
 const MODEL_MAP: Record<string, string> = {
-  regular: "gemini-1.5-flash",
-  simplified: "gemini-1.5-flash"
+  // Use a reliable model for detailed mode to avoid fallback content.
+  regular: "gemini-2.5-flash",
+  // Try a cheaper/faster model for simplified mode; fall back if unavailable.
+  simplified: "gemini-2.5-flash-lite"
 };
+
+function getModelWithFallback(requestedModelId: string, fallbackModelId: string) {
+  try {
+    return genAI.getGenerativeModel({ model: requestedModelId });
+  } catch {
+    return genAI.getGenerativeModel({ model: fallbackModelId });
+  }
+}
 
 function buildPrompt(rawData: {
   name: string;
@@ -143,8 +153,11 @@ CRITICAL: Use casual, conversational language throughout but ALWAYS follow this 
     console.log('Making Google Gemini API call with model:', modelId);
     console.log('Google AI API Key exists:', !!GOOGLE_AI_API_KEY);
     
-    // Get the Gemini model
-    const geminiModel = genAI.getGenerativeModel({ model: modelId });
+    // Get the Gemini model (simplified mode uses a lightweight model with fallback)
+    const geminiModel =
+      model === 'simplified'
+        ? getModelWithFallback(modelId, MODEL_MAP.regular)
+        : genAI.getGenerativeModel({ model: modelId });
     
     // Generate content using Gemini
     const result = await geminiModel.generateContent(prompt);

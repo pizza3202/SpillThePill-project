@@ -40,7 +40,7 @@ app.post("/api/chat", async (req, res) => {
 User question: ${message}`;
 
     // Get the Gemini model
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     
     // Generate response using Gemini
     const result = await model.generateContent(pillBotPrompt);

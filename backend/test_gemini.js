@@ -11,19 +11,25 @@ if (!apiKey) {
 }
 
 const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const MODELS_TO_TEST = [
+  { id: 'gemini-2.5-flash', label: 'flash (recommended)' },
+  { id: 'gemini-2.5-flash-lite', label: 'flash-lite (simplified candidate)' },
+];
 
 async function testGemini() {
-  try {
-    console.log('Calling Gemini...');
-    const result = await model.generateContent('Say hello in Hindi');
-    const response = await result.response;
-    console.log('Success! Response:', response.text());
-  } catch (error) {
-    console.error('Gemini Error Details:');
-    console.error('Message:', error.message);
-    console.error('Status:', error.status);
-    console.error('Full error:', error);
+  for (const m of MODELS_TO_TEST) {
+    try {
+      console.log(`\nCalling Gemini with model: ${m.id} (${m.label})`);
+      const model = genAI.getGenerativeModel({ model: m.id });
+      const result = await model.generateContent('Say hello in Hindi');
+      const response = await result.response;
+      console.log('Success! Response:', response.text());
+    } catch (error) {
+      console.error('Gemini Error Details:');
+      console.error('Model:', m.id);
+      console.error('Message:', error.message);
+      console.error('Status:', error.status);
+    }
   }
 }
 
